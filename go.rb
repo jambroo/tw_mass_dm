@@ -66,8 +66,7 @@ if !username_result
 end
 
 def get_followers(cursor)
-  #followers
-  followers_result = twurl("/1.1/friends/list.json?cursor=#{cursor}")
+  followers_result = twurl("/1.1/followers/list.json?cursor=#{cursor}")
   if !followers_result
     abort("ERROR: could not get friends list")
   end
@@ -79,12 +78,31 @@ def get_followers(cursor)
   screen_names = followers_result["users"].map { |k| k["screen_name"] }
   next_cursor = followers_result["next_cursor"]
 
-  puts screen_names
-  puts next_cursor
-
   if next_cursor.to_i != 0
-    get_followers(next_cursor)
+    screen_names = screen_names + get_followers(next_cursor)
   end
+
+  return screen_names
 end
 
-get_followers(-1)
+limit = 1
+count = 0
+get_followers(-1).each do | username |
+  cleaned_dm = $dm_text.gsub("\\n", "\n")
+
+  if count >= limit
+    abort("Message limit reached")
+  end
+
+  already_sent = get_cache_entry("/1.1/direct_messages/new.json TO #{username}")
+  if already_sent
+    puts "NOTICE: Already sent to #{username}. Skipping."
+  else
+    dm_result = `twurl /1.1/direct_messages/new.json -d "text=#{cleaned_dm}&user=#{username}"`
+    if dm_result.has_key?("errors")
+      abort(dm_result["errors"].to_s)
+    end
+    set_cache_entry("/1.1/direct_messages/new.json TO #{username}", dm_result)
+  end
+  count += 1
+end
