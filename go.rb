@@ -1,5 +1,12 @@
 require 'json'
 
+if ARGV.length != 2
+  abort("ruby /go.rb limit offset")
+end
+
+limit = ARGV[0].to_i
+offset = ARGV[1].to_i
+
 if !ENV.has_key?("TW_KEY") || !ENV.has_key?("TW_SECRET") || !ENV.has_key?("TW_USERNAME") || !ENV.has_key?("DM_TEXT")
   abort("ERROR: TW_KEY, TW_SECRET, TW_USERNAME and DM_TEXT environment variables are required.")
 end
@@ -85,13 +92,19 @@ def get_followers(cursor)
   return screen_names
 end
 
-limit = 1
 count = 0
+processed = 0
 get_followers(-1).each do | username |
   cleaned_dm = $dm_text.gsub("\\n", "\n")
 
-  if count >= limit
-    abort("Message limit reached")
+  if count < offset
+    count += 1
+
+    next
+  end
+
+  if processed >= limit
+    exit 1
   end
 
   already_sent = get_cache_entry("/1.1/direct_messages/new.json TO #{username}")
@@ -99,10 +112,14 @@ get_followers(-1).each do | username |
     puts "NOTICE: Already sent to #{username}. Skipping."
   else
     dm_result = `twurl /1.1/direct_messages/new.json -d "text=#{cleaned_dm}&user=#{username}"`
-    if dm_result.has_key?("errors")
+
+    if JSON.parse(dm_result).has_key?("errors")
       abort(dm_result["errors"].to_s)
     end
+    puts "Successfully messaged #{username}."
     set_cache_entry("/1.1/direct_messages/new.json TO #{username}", dm_result)
   end
+
+  processed += 1
   count += 1
 end
