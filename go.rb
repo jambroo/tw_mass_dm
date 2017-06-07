@@ -45,7 +45,9 @@ def set_cache_entry(call, result)
 
   data_hash[username][text][call] = result
 
-  File.open(CACHE_FILE, 'w') { |file| file.write(data_hash.to_json) }
+  if !JSON.parse(result).has_key?("errors")
+    File.open(CACHE_FILE, 'w') { |file| file.write(data_hash.to_json) }
+  end
 
   return true
 end
