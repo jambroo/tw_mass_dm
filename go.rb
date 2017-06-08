@@ -45,20 +45,29 @@ def set_cache_entry(call, result)
 
   data_hash[username][text][call] = result
 
-  if !JSON.parse(result).has_key?("errors")
-    File.open(CACHE_FILE, 'w') { |file| file.write(data_hash.to_json) }
-  end
+  File.open(CACHE_FILE, 'w') { |file| file.write(data_hash.to_json) }
 
   return true
 end
 
-def twurl(call)
+def twurl_get_followers(cursor)
+  call = "/1.1/followers/list.json?cursor=#{cursor}"
   result = get_cache_entry(call)
   if !result
-    result = `twurl #{call}`
+    full_result = JSON.parse(`twurl #{call}`)
+
+    if full_result.has_key?("errors")
+      abort(full_result["errors"].to_s)
+    end
+
+    result = {}
+    result["users"] = full_result["users"].map { |k| k["screen_name"] }
+    result["next"] = full_result["next_cursor"]
+
     set_cache_entry(call, result)
   end
-  return JSON.parse(result)
+
+  return result
 end
 
 authorized = `twurl accounts`
@@ -75,7 +84,7 @@ if !username_result
 end
 
 def get_followers(cursor)
-  followers_result = twurl("/1.1/followers/list.json?cursor=#{cursor}")
+  followers_result = twurl_get_followers(cursor)
   if !followers_result
     abort("ERROR: could not get friends list")
   end
@@ -84,8 +93,8 @@ def get_followers(cursor)
     abort(followers_result["errors"].to_s)
   end
 
-  screen_names = followers_result["users"].map { |k| k["screen_name"] }
-  next_cursor = followers_result["next_cursor"]
+  screen_names = followers_result["users"]
+  next_cursor = followers_result["next"]
 
   if next_cursor.to_i != 0
     screen_names = screen_names + get_followers(next_cursor)
@@ -113,9 +122,9 @@ get_followers(-1).each do | username |
   if already_sent
     puts "NOTICE: Already sent to #{username}. Skipping."
   else
-    dm_result = `twurl /1.1/direct_messages/new.json -d "text=#{cleaned_dm}&user=#{username}"`
+    dm_result = JSON.parse(`twurl /1.1/direct_messages/new.json -d "text=#{cleaned_dm}&user=#{username}"`)
 
-    if JSON.parse(dm_result).has_key?("errors")
+    if dm_result.has_key?("errors")
       abort(dm_result["errors"].to_s)
     end
     puts "Successfully messaged #{username}."
