@@ -1,11 +1,13 @@
 require 'json'
 
-if ARGV.length != 2
-  abort("ruby /go.rb limit offset")
+if ARGV.length != 4
+  abort("ruby /go.rb limit offset chunk_size sleep_time_minutes")
 end
 
 limit = ARGV[0].to_i
 offset = ARGV[1].to_i
+chunk_size = ARGV[2].to_i
+sleep_time = ARGV[3].to_i
 
 if !ENV.has_key?("TW_KEY") || !ENV.has_key?("TW_SECRET") || !ENV.has_key?("TW_USERNAME") || !ENV.has_key?("DM_TEXT")
   abort("ERROR: TW_KEY, TW_SECRET, TW_USERNAME and DM_TEXT environment variables are required.")
@@ -125,10 +127,20 @@ get_followers(-1).each do | username |
     dm_result = JSON.parse(`twurl /1.1/direct_messages/new.json -d "text=#{cleaned_dm}&user=#{username}"`)
 
     if dm_result.has_key?("errors")
-      abort(dm_result["errors"].to_s)
+      if dm_result["errors"][0]["code"] == 34
+        puts "NOTICE: Can't send to #{username}."
+      else
+        abort(dm_result["errors"].to_s)
+      end
+    else
+      puts "Successfully messaged #{username}."
+      set_cache_entry("/1.1/direct_messages/new.json TO #{username}", dm_result)
+
+      if count % chunk_size == 0
+        puts "Sleeping..."
+        sleep(sleep_time * 60)
+      end
     end
-    puts "Successfully messaged #{username}."
-    set_cache_entry("/1.1/direct_messages/new.json TO #{username}", dm_result)
   end
 
   processed += 1
